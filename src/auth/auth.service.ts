@@ -26,8 +26,14 @@ export class AuthService {
       });
     }
 
-    if (await bcrypt.compare(resetPasswordDto.newPassword, user.password)) {
+    const isMatch = await bcrypt.compare(
+      resetPasswordDto.oldPassword,
+      user.password,
+    );
+
+    if (isMatch) {
       await this.userService.updatePassword(id, resetPasswordDto.newPassword);
+      return 'Password successfully changed';
     }
 
     throw new BadRequestException({ message: 'Old password is wrong' });
