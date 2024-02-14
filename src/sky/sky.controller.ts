@@ -7,7 +7,7 @@ export class SkyController {
   constructor(private skyService: SkyService) {}
 
   @Get()
-  async testFunction(@Body() filteredSkyDto: FilteredSkyDto) {
+  async getFlights(@Body() filteredSkyDto: FilteredSkyDto) {
     const res = await this.skyService.getFlights(filteredSkyDto);
 
     return res;

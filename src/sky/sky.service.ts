@@ -41,7 +41,7 @@ export class SkyService {
 
     const session = response.data.sessionToken;
 
-    const fin = await lastValueFrom(
+    const secondRequest = await lastValueFrom(
       this.httpService.post(
         `https://partners.api.skyscanner.net/apiservices/v3/flights/live/search/poll/${session}`,
         {},
@@ -52,11 +52,39 @@ export class SkyService {
         },
       ),
     );
+    const result = secondRequest.data.content.results.itineraries;
 
-    return fin.data;
+    const findingKey = this.findKey(result, 'pricingOptions');
 
-    // curl --location --request POST 'https://partners.api.skyscanner.net/apiservices/v3/flights/live/search/poll/SESSION_TOKEN' --header 'x-api-key: sh428739766321522266746152871799'
+    const mappingFind = findingKey.map((obj) => {
+      return obj.items;
+    });
 
-    // curl --request POST 'https://partners.api.skyscanner.net/apiservices/v3/flights/live/search/create' --header 'x-api-key: sh428739766321522266746152871799' --data ' {"query":{"market":"UK","locale":"en-GB","currency":"GBP","query_legs":[{"origin_place_id":{"iata":"LHR"},"destination_place_id":{"iata":"SIN"},"date":{"year":2024,"month":12,"day":22}}],"adults":1,"cabin_class":"CABIN_CLASS_ECONOMY"}}'
+    const extractedData = mappingFind.flatMap((item) => {
+      if (item[0]?.price && item[0]?.price?.amount) {
+        const deepLink = item[0].deepLink;
+        const priceAmount = item[0].price.amount;
+        return { deepLink, priceAmount };
+      }
+    });
+
+    const finalResult = extractedData.map((a) => {
+      return { price: Number(a.priceAmount) / 1000, link: a.deepLink };
+    });
+
+    return finalResult;
+  }
+
+  findKey(obj, targetKey) {
+    for (const key in obj) {
+      if (key === targetKey) {
+        return obj[key];
+      } else if (typeof obj[key] === 'object') {
+        const result = this.findKey(obj[key], targetKey);
+        if (result !== undefined) {
+          return result;
+        }
+      }
+    }
   }
 }
