@@ -4,7 +4,7 @@ import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { AuthModule } from './auth/auth.module';
+import { SkyModule } from './sky/sky.module';
 
 @Module({
   imports: [
@@ -25,10 +25,11 @@ import { AuthModule } from './auth/auth.module';
         database: configService.get('DATABASE_NAME'),
         synchronize: configService.get<boolean>('DATABASE_SYNC'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        logging: configService.get<boolean>('POSTGRES_LOGGING'),
       }),
       inject: [ConfigService],
     }),
-    AuthModule,
+    SkyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,13 +1,11 @@
 import {
   Controller,
-  Get,
   Body,
   Patch,
   Param,
   Delete,
   UseGuards,
   Req,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -20,13 +18,6 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @ApiBearerAuth()
-  @Get('info')
-  @UseGuards(AuthGuard('jwt'))
-  getInfo(@Req() req) {
-    return this.userService.getInfo(req.user.userId);
-  }
-
-  @ApiBearerAuth()
   @Patch()
   @UseGuards(AuthGuard('jwt'))
   update(@Req() req, @Body() updateUserDto: UpdateUserDto) {
@@ -36,7 +27,7 @@ export class UserController {
   @ApiBearerAuth()
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'))
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id') id: string) {
     return this.userService.remove(id);
   }
 }
