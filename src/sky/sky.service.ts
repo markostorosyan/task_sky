@@ -70,12 +70,45 @@ export class SkyService {
         leg.legs.originPlaceId,
         leg.legs.destinationPlaceId,
         places,
+        'legs',
       ),
     );
+
+    this.objectData.data.forEach((seg) =>
+      this.findCountry(
+        seg.segmentData.originPlaceId,
+        seg.segmentData.destinationPlaceId,
+        places,
+        'segmentData',
+      ),
+    );
+    // for (const l in this.objectData.data[0]) {
+    //   if (l === 'legs') {
+    //     console.log(this.objectData.data[0][l]);
+    //     // this.findCountry(l.originPlaceId, l.destinationPlaceId, places);
+    //   }
+    //   // console.log(l);
+    // }
+    // this.objectData.data.forEach((leg) =>
+    //   this.findCountry(
+    //     leg.legs.originPlaceId,
+    //     leg.legs.destinationPlaceId,
+    //     places,
+    //   ),
+    // );
     // const {} = this.objectData.data;
-    return places;
+    // return places;
+
+    // this.objectData.data.forEach((obj) => {
+    //   // console.log(obj.legs, '----');
+    //   const legsKey = obj.legs;
+    //   if (legs.hasOwnProperty(legsKey)) {
+    //     console.log('innnn');
+    //     obj.legs = legs[legsKey];
+    //   }
+    // });
+
     return this.objectData;
-    // return segments;
   }
 
   parseData(obj) {
@@ -94,28 +127,17 @@ export class SkyService {
     }
   }
 
-  // parseData(obj) {
-  //   const objectData = { data: [] };
-  //   for (const key in obj) {
-  //     const arr = obj[key].pricingOptions;
-  //     arr.map((item) => {
-  //       item.items.map((b) => {
-  //         objectData.data.push({
-  //           link: b.deepLink,
-  //           price: b.price?.amount / 1000,
-  //           segment: b.fares.map((s) => s.segmentId),
-  //           legs: obj[key].legIds[0],
-  //         });
-  //       });
-  //     });
-  //   }
-  //   return objectData;
-  // }
-
-  findCountry(originPlaceId, destinationPlaceId, places) {
+  findCountry(originPlaceId, destinationPlaceId, places, type) {
     for (const key in places) {
       if (key === originPlaceId) {
-        console.log(key, originPlaceId);
+        for (const index of this.objectData.data) {
+          index[type].originPlaceId = places[key].name;
+        }
+      }
+      if (key === destinationPlaceId) {
+        for (const index of this.objectData.data) {
+          index[type].destinationPlaceId = places[key].name;
+        }
       }
     }
   }
@@ -177,4 +199,34 @@ export class SkyService {
       }
     }
   }
+
+  // findCountryForLegs(originPlaceId, destinationPlaceId, places) {
+  //   for (const key in places) {
+  //     if (key === originPlaceId) {
+  //       for (const index of this.objectData.data) {
+  //         index.legs.originPlaceId = places[key].name;
+  //       }
+  //     }
+  //     if (key === destinationPlaceId) {
+  //       for (const index of this.objectData.data) {
+  //         index.legs.destinationPlaceId = places[key].name;
+  //       }
+  //     }
+  //   }
+  // }
+
+  // findCountryForSegments(originPlaceId, destinationPlaceId, places) {
+  //   for (const key in places) {
+  //     if (key === originPlaceId) {
+  //       for (const index of this.objectData.data) {
+  //         index.segmentData.originPlaceId = places[key].name;
+  //       }
+  //     }
+  //     if (key === destinationPlaceId) {
+  //       for (const index of this.objectData.data) {
+  //         index.segmentData.destinationPlaceId = places[key].name;
+  //       }
+  //     }
+  //   }
+  // }
 }
