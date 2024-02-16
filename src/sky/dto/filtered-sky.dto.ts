@@ -3,6 +3,14 @@ import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
 export class FilteredSkyDto {
   @IsNotEmpty()
   @IsString()
+  market: string;
+
+  @IsNotEmpty()
+  @IsString()
+  locale: string;
+
+  @IsNotEmpty()
+  @IsString()
   from: string;
 
   @IsNotEmpty()

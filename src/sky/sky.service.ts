@@ -6,6 +6,11 @@ import { FilteredSkyDto } from './dto/filtered-sky.dto';
 @Injectable()
 export class SkyService {
   objectData = { data: [] };
+  segments;
+  legs;
+  places;
+  carriers;
+  alliances;
   constructor(private httpService: HttpService) {}
 
   async getFlights(filteredSkyDto: FilteredSkyDto) {
@@ -14,8 +19,8 @@ export class SkyService {
         'https://partners.api.skyscanner.net/apiservices/v3/flights/live/search/create',
         {
           query: {
-            market: 'UK',
-            locale: 'en-GB',
+            market: filteredSkyDto.market,
+            locale: filteredSkyDto.locale,
             currency: filteredSkyDto.currency,
             query_legs: [
               {
@@ -55,58 +60,19 @@ export class SkyService {
     );
 
     const result = secondRequest.data.content.results.itineraries;
-
     this.parseData(result);
-    const legs = secondRequest.data.content.results.legs;
-    const segments = secondRequest.data.content.results.segments;
-    const places = secondRequest.data.content.results.places;
 
-    this.objectData.data.forEach((leg) => this.findLegsById(leg.legs, legs));
-    this.objectData.data.forEach((segment) =>
-      segment.segment.forEach((f) => this.findSegmentById(f, segments)),
-    );
-    this.objectData.data.forEach((leg) =>
-      this.findCountry(
-        leg.legs.originPlaceId,
-        leg.legs.destinationPlaceId,
-        places,
-        'legs',
-      ),
-    );
+    const source = secondRequest.data.content.results;
+    this.legs = source.legs;
+    this.segments = source.segments;
+    this.places = source.places;
+    this.carriers = source.carriers;
+    this.alliances = source.alliances;
 
-    this.objectData.data.forEach((seg) =>
-      this.findCountry(
-        seg.segmentData.originPlaceId,
-        seg.segmentData.destinationPlaceId,
-        places,
-        'segmentData',
-      ),
-    );
-    // for (const l in this.objectData.data[0]) {
-    //   if (l === 'legs') {
-    //     console.log(this.objectData.data[0][l]);
-    //     // this.findCountry(l.originPlaceId, l.destinationPlaceId, places);
-    //   }
-    //   // console.log(l);
-    // }
-    // this.objectData.data.forEach((leg) =>
-    //   this.findCountry(
-    //     leg.legs.originPlaceId,
-    //     leg.legs.destinationPlaceId,
-    //     places,
-    //   ),
-    // );
-    // const {} = this.objectData.data;
-    // return places;
-
-    // this.objectData.data.forEach((obj) => {
-    //   // console.log(obj.legs, '----');
-    //   const legsKey = obj.legs;
-    //   if (legs.hasOwnProperty(legsKey)) {
-    //     console.log('innnn');
-    //     obj.legs = legs[legsKey];
-    //   }
-    // });
+    this.findLegs();
+    this.findSegments();
+    this.findCountry('legs');
+    this.findCountry('segment');
 
     return this.objectData;
   }
@@ -127,25 +93,146 @@ export class SkyService {
     }
   }
 
-  findCountry(originPlaceId, destinationPlaceId, places, type) {
+  findCountry(type) {
+    const places = this.places;
     for (const key in places) {
-      if (key === originPlaceId) {
-        for (const index of this.objectData.data) {
-          index[type].originPlaceId = places[key].name;
+      for (const index of this.objectData.data) {
+        if (index[type].originPlace === key) {
+          index[type].originPlace = places[key].name;
         }
-      }
-      if (key === destinationPlaceId) {
-        for (const index of this.objectData.data) {
-          index[type].destinationPlaceId = places[key].name;
+        if (index[type].destinationPlace === key) {
+          index[type].destinationPlace = places[key].name;
         }
       }
     }
   }
 
-  findLegsById(legId, data) {
+  findCountryForSegment(originPlaceId, destinationPlaceId) {
+    const obj = {};
+    const places = this.places;
+    for (const key in places) {
+      if (originPlaceId === key) {
+        obj[originPlaceId] = places[key].name;
+      }
+      if (destinationPlaceId === key) {
+        obj[destinationPlaceId] = places[key].name;
+      }
+    }
+
+    return obj;
+  }
+
+  findCarriers(carriers) {
+    const arr = [];
+    const data = this.carriers;
     for (const key in data) {
-      if (key === legId) {
-        for (const leg of this.objectData.data) {
+      if (!Array.isArray(carriers)) {
+        if (carriers === key) {
+          const { name, allianceId, imageUrl, iata, icao, displayCode } =
+            data[key];
+          const alliance = this.findAllianceById(allianceId);
+          return { name, alliance, imageUrl, iata, icao, displayCode };
+        }
+      }
+      for (const id of carriers) {
+        if (id === key) {
+          const { name, allianceId, imageUrl, iata, icao, displayCode } =
+            data[key];
+          const alliance = this.findAllianceById(allianceId);
+          arr.push({ name, alliance, imageUrl, iata, icao, displayCode });
+        }
+      }
+    }
+    return arr;
+  }
+
+  findAllianceById(id) {
+    const data = this.alliances;
+    for (const key in data) {
+      if (id === key) {
+        return data[key].name;
+      }
+    }
+  }
+
+  findLegs() {
+    const data = this.legs;
+    for (const key in data) {
+      for (const l of this.objectData.data) {
+        if (l.legs === key) {
+          const {
+            originPlaceId,
+            destinationPlaceId,
+            departureDateTime,
+            arrivalDateTime,
+            durationInMinutes,
+            stopCount,
+            marketingCarrierIds,
+            operatingCarrierIds,
+            segmentIds,
+          } = data[key];
+          const segmentId = this.findSegmentsByIds(segmentIds);
+          const marketingCarrier = this.findCarriers(marketingCarrierIds);
+          const operatingCarrier = this.findCarriers(operatingCarrierIds);
+          l.legs = {
+            originPlace: originPlaceId,
+            destinationPlace: destinationPlaceId,
+            departureDateTime,
+            arrivalDateTime,
+            durationInMinutes,
+            stopCount,
+            marketingCarrier,
+            operatingCarrier,
+            segment: segmentId,
+          };
+        }
+      }
+    }
+  }
+
+  findSegmentsByIds(arr) {
+    const data = this.segments;
+    const segmentsArr = [];
+    for (const key in data) {
+      for (const s of arr) {
+        if (s === key) {
+          const {
+            originPlaceId,
+            destinationPlaceId,
+            departureDateTime,
+            arrivalDateTime,
+            durationInMinutes,
+            marketingFlightNumber,
+            marketingCarrierId,
+            operatingCarrierId,
+          } = data[key];
+          const placeObject = this.findCountryForSegment(
+            originPlaceId,
+            destinationPlaceId,
+          );
+          const marketingCarrier = this.findCarriers(marketingCarrierId);
+          const operatingCarrier = this.findCarriers(operatingCarrierId);
+          segmentsArr.push({
+            originPlace: placeObject[originPlaceId],
+            destinationPlace: placeObject[destinationPlaceId],
+            departureDateTime,
+            arrivalDateTime,
+            durationInMinutes,
+            marketingFlightNumber,
+            marketingCarrier,
+            operatingCarrier,
+          });
+        }
+      }
+    }
+    return segmentsArr;
+  }
+
+  findSegments() {
+    const data = this.segments;
+    for (const key in data) {
+      for (const s of this.objectData.data) {
+        if (s.segment[0] === key) {
           const {
             originPlaceId,
             destinationPlaceId,
@@ -156,9 +243,9 @@ export class SkyService {
             marketingCarrierIds,
             operatingCarrierIds,
           } = data[key];
-          leg.legs = {
-            originPlaceId,
-            destinationPlaceId,
+          s.segment = {
+            originPlace: originPlaceId,
+            destinationPlace: destinationPlaceId,
             departureDateTime,
             arrivalDateTime,
             durationInMinutes,
@@ -170,63 +257,4 @@ export class SkyService {
       }
     }
   }
-
-  findSegmentById(segmentId, data) {
-    for (const key in data) {
-      if (key === segmentId) {
-        for (const s of this.objectData.data) {
-          const {
-            originPlaceId,
-            destinationPlaceId,
-            departureDateTime,
-            arrivalDateTime,
-            durationInMinutes,
-            marketingFlightNumber,
-            marketingCarrierId,
-            operatingCarrierId,
-          } = data[key];
-          s.segmentData = {
-            originPlaceId,
-            destinationPlaceId,
-            departureDateTime,
-            arrivalDateTime,
-            durationInMinutes,
-            marketingFlightNumber,
-            marketingCarrierId,
-            operatingCarrierId,
-          };
-        }
-      }
-    }
-  }
-
-  // findCountryForLegs(originPlaceId, destinationPlaceId, places) {
-  //   for (const key in places) {
-  //     if (key === originPlaceId) {
-  //       for (const index of this.objectData.data) {
-  //         index.legs.originPlaceId = places[key].name;
-  //       }
-  //     }
-  //     if (key === destinationPlaceId) {
-  //       for (const index of this.objectData.data) {
-  //         index.legs.destinationPlaceId = places[key].name;
-  //       }
-  //     }
-  //   }
-  // }
-
-  // findCountryForSegments(originPlaceId, destinationPlaceId, places) {
-  //   for (const key in places) {
-  //     if (key === originPlaceId) {
-  //       for (const index of this.objectData.data) {
-  //         index.segmentData.originPlaceId = places[key].name;
-  //       }
-  //     }
-  //     if (key === destinationPlaceId) {
-  //       for (const index of this.objectData.data) {
-  //         index.segmentData.destinationPlaceId = places[key].name;
-  //       }
-  //     }
-  //   }
-  // }
 }
