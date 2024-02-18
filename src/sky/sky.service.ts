@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { lastValueFrom } from 'rxjs';
 import { FilteredSkyDto } from './dto/filtered-sky.dto';
+import { DateTime } from 'luxon';
 
 @Injectable()
 export class SkyService {
@@ -70,10 +71,13 @@ export class SkyService {
     this.alliances = source.alliances;
 
     this.findLegs();
-    this.findSegments();
+    // this.findSegments();
     this.findCountry('legs');
-    this.findCountry('segment');
-
+    // this.findCountry('segment');
+    this.objectData.data.forEach((obj) => this.stopTime(obj.legs.segments));
+    this.objectData.data.forEach((obj) =>
+      this.calculateTotalWaitingTime(obj.legs),
+    );
     return this.objectData;
   }
 
@@ -85,7 +89,7 @@ export class SkyService {
           this.objectData.data.push({
             link: item.deepLink,
             price: item.price?.amount / 1000,
-            segment: item.fares.map((s) => s.segmentId),
+            // segment: item.fares.map((s) => s.segmentId),
             legs: obj[key].legIds[0],
           });
         }
@@ -97,11 +101,11 @@ export class SkyService {
     const places = this.places;
     for (const key in places) {
       for (const index of this.objectData.data) {
-        if (index[type].originPlace === key) {
-          index[type].originPlace = places[key].name;
+        if (index[type].from === key) {
+          index[type].from = places[key].name;
         }
-        if (index[type].destinationPlace === key) {
-          index[type].destinationPlace = places[key].name;
+        if (index[type].to === key) {
+          index[type].to = places[key].name;
         }
       }
     }
@@ -167,23 +171,38 @@ export class SkyService {
             arrivalDateTime,
             durationInMinutes,
             stopCount,
-            marketingCarrierIds,
-            operatingCarrierIds,
+            // marketingCarrierIds,
+            // operatingCarrierIds,
             segmentIds,
           } = data[key];
           const segmentId = this.findSegmentsByIds(segmentIds);
-          const marketingCarrier = this.findCarriers(marketingCarrierIds);
-          const operatingCarrier = this.findCarriers(operatingCarrierIds);
+          // const marketingCarrier = this.findCarriers(marketingCarrierIds);
+          // const operatingCarrier = this.findCarriers(operatingCarrierIds);
+          const departuresDate = DateTime.fromObject({
+            year: departureDateTime.year,
+            month: departureDateTime.month,
+            day: departureDateTime.day,
+            hour: departureDateTime.hour,
+            minute: departureDateTime.minute,
+          }).toFormat('dd.L.yy HH:mm');
+          const arrivalsDate = DateTime.fromObject({
+            year: arrivalDateTime.year,
+            month: arrivalDateTime.month,
+            day: arrivalDateTime.day,
+            hour: arrivalDateTime.hour,
+            minute: arrivalDateTime.minute,
+          }).toFormat('dd.L.yy HH:mm');
           l.legs = {
-            originPlace: originPlaceId,
-            destinationPlace: destinationPlaceId,
-            departureDateTime,
-            arrivalDateTime,
-            durationInMinutes,
+            from: originPlaceId,
+            to: destinationPlaceId,
+            departuresDate,
+            arrivalsDate,
+            duration: this.formatDuration(durationInMinutes),
+            totalWaitingTime: '',
             stopCount,
-            marketingCarrier,
-            operatingCarrier,
-            segment: segmentId,
+            // marketingCarrier,
+            // operatingCarrier,
+            segments: segmentId,
           };
         }
       }
@@ -203,30 +222,155 @@ export class SkyService {
             arrivalDateTime,
             durationInMinutes,
             marketingFlightNumber,
-            marketingCarrierId,
-            operatingCarrierId,
+            // marketingCarrierId,
+            // operatingCarrierId,
           } = data[key];
           const placeObject = this.findCountryForSegment(
             originPlaceId,
             destinationPlaceId,
           );
-          const marketingCarrier = this.findCarriers(marketingCarrierId);
-          const operatingCarrier = this.findCarriers(operatingCarrierId);
+          // const marketingCarrier = this.findCarriers(marketingCarrierId);
+          // const operatingCarrier = this.findCarriers(operatingCarrierId);
+          // const arrivalsDate = new Date()  // if don't need luxon
+          const departuresDate = DateTime.fromObject({
+            year: departureDateTime.year,
+            month: departureDateTime.month,
+            day: departureDateTime.day,
+            hour: departureDateTime.hour,
+            minute: departureDateTime.minute,
+          }).toFormat('dd.L.yy HH:mm');
+          const arrivalsDate = DateTime.fromObject({
+            year: arrivalDateTime.year,
+            month: arrivalDateTime.month,
+            day: arrivalDateTime.day,
+            hour: arrivalDateTime.hour,
+            minute: arrivalDateTime.minute,
+          }).toFormat('dd.L.yy HH:mm');
           segmentsArr.push({
-            originPlace: placeObject[originPlaceId],
-            destinationPlace: placeObject[destinationPlaceId],
-            departureDateTime,
-            arrivalDateTime,
-            durationInMinutes,
+            arrivals: placeObject[originPlaceId],
+            departures: placeObject[destinationPlaceId],
+            departuresDate,
+            arrivalsDate,
+            duration: this.formatDuration(durationInMinutes),
+            waitingTime: '',
             marketingFlightNumber,
-            marketingCarrier,
-            operatingCarrier,
+            // marketingCarrier, // need?
+            // operatingCarrier, // need?
           });
         }
       }
     }
     return segmentsArr;
   }
+
+  formatDuration(durationInMinutes) {
+    const minute = durationInMinutes % 60;
+    const hour = (durationInMinutes - minute) / 60;
+
+    return `${hour}h:${minute}m`;
+  }
+
+  dateTimeToMinutes(date) {
+    const time = date.slice(-5);
+    const hour = time.slice(0, 2) * 60;
+    const minute = Number(time.slice(-2));
+    return hour + minute;
+  }
+
+  timeToMinutes(time) {
+    if (!time) {
+      return 0;
+    }
+    const hourIndex = time.indexOf('h');
+    const minuteIndex = time.indexOf('m');
+    const divisionIndex = time.indexOf(':');
+    const hour = time.slice(0, hourIndex);
+    const minute = time.slice(divisionIndex + 1, minuteIndex);
+    return hour * 60 + Number(minute);
+  }
+
+  calculateTotalWaitingTime(leg) {
+    let time = 0;
+    for (const s of leg.segments) {
+      const minutes = this.timeToMinutes(s.waitingTime);
+      time = time + minutes;
+    }
+
+    leg.totalWaitingTime = this.formatDuration(time);
+  }
+
+  stopTime(segments) {
+    const from = this.objectData.data[0]?.legs.from;
+    const to = this.objectData.data[0]?.legs.to;
+    if (segments.length <= 1) {
+      return;
+    }
+    for (const city of segments) {
+      if (from === city.arrivals) {
+        delete city.waitingTime;
+      }
+      if (to === city.departures) {
+        const arrivalsTime = this.dateTimeToMinutes(city.departuresDate);
+        for (const obj of segments) {
+          if (city.arrivals === obj.departures) {
+            const departuresTime = this.dateTimeToMinutes(obj.arrivalsDate);
+            const result = this.formatDuration(arrivalsTime - departuresTime);
+            city.waitingTime = result;
+          }
+        }
+      }
+      if (segments.length > 2) {
+        for (const obj of segments) {
+          if (city.departures === obj.arrivals && obj.arrivals !== from) {
+            const arrivalsTime = this.dateTimeToMinutes(city.arrivalsDate);
+            const departuresTime = this.dateTimeToMinutes(obj.departuresDate);
+            const result = this.formatDuration(departuresTime - arrivalsTime);
+            obj.waitingTime = result;
+          }
+        }
+      }
+    }
+  }
+
+  // stopTime(segments) {
+  //   const from = this.objectData.data[0]?.from;
+  //   const to = this.objectData.data[0]?.to;
+  //   if (segments.length <= 1) {
+  //     return;
+  //   }
+  //   for (const city of segments) {
+  //     if (from === city.arrivals) {
+  //       const arrivalsTime = this.timeToMinutes(city.arrivalsDate);
+  //       for (const obj of segments) {
+  //         if (city.departures === obj.arrivals) {
+  //           const departuresTime = this.timeToMinutes(obj.departuresDate);
+  //           const result = this.formatDuration(departuresTime - arrivalsTime);
+  //           return result;
+  //         }
+  //       }
+  //     }
+  //     if (to === city.departures) {
+  //       const arrivalsTime = this.timeToMinutes(city.arrivalsDate);
+  //       for (const obj of segments) {
+  //         if (city.arrivals === obj.departures) {
+  //           const departuresTime = this.timeToMinutes(obj.departuresDate);
+  //           const result = this.formatDuration(departuresTime - arrivalsTime);
+  //           return result;
+  //         }
+  //       }
+  //     }
+  //     if (segments.length > 2) {
+  //       for (const obj of segments) {
+  //         if (city.arrivals === obj.departures) {
+  //           const arrivalsTime = this.timeToMinutes(city.arrivalsDate);
+  //           const departuresTime = this.timeToMinutes(obj.departuresDate);
+  //           const result = this.formatDuration(departuresTime - arrivalsTime);
+  //           return result;
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   findSegments() {
     const data = this.segments;
